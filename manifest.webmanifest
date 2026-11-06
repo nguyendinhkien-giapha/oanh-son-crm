@@ -1,0 +1,9 @@
+{
+  "name": "OANH SƠN CRM",
+  "short_name": "OANH SƠN CRM",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f6fa",
+  "theme_color": "#16324f",
+  "icons": [{"src":"oanh_son_crm_apple_touch_icon.png","sizes":"1024x1024","type":"image/png","purpose":"any"}]
+}
