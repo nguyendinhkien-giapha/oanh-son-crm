@@ -1,0 +1,6 @@
+OANH SON CRM - GITHUB PAGES
+
+Tai len TOAN BO cac tep trong thu muc nay vao thu muc goc Repository (khong tai len ca thu muc OANH_SON_CRM_GITHUB).
+Tep index.html phai nam ngay thu muc goc.
+Sau khi Commit changes, vao Settings > Pages, chon Deploy from a branch > main > /(root) > Save.
+Cho GitHub Pages cap nhat, mo: https://nguyendinhkien-giapha.github.io/oanh-son-crm/
