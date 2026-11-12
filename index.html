@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="OANH SƠN CRM">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root{--navy:#16324f;--teal:#087f8c;--bg:#f3f6fa;--line:#dce4ed;--text:#172b40;--muted:#65778b}
 *{box-sizing:border-box}body{margin:0;font:15px/1.45 "Segoe UI",Arial,sans-serif;background:var(--bg);color:var(--text)}
@@ -39,8 +40,8 @@ main{max-width:1400px;margin:22px auto;padding:0 18px}
   .toolbar #filterRoute{grid-column:2;grid-row:2}
   .toolbar .filter-select{width:100%;min-width:0;max-width:none;font-size:16px;padding:10px 8px}
   .toolbar button{min-width:0;width:100%;font-size:13px;padding:10px 7px}
-  .toolbar button.secondary:nth-of-type(1){grid-column:1}
-  .toolbar button.secondary:nth-of-type(2){grid-column:2}
+  .toolbar .excel-action{display:none}
+  .toolbar button.secondary:not(.excel-action){grid-column:auto}
   .toolbar input, .toolbar select, .formgrid input, .formgrid select, .formgrid textarea{font-size:16px}
 }
 input,select,textarea{font:inherit;padding:10px 12px;border:1px solid #cbd7e3;border-radius:8px;background:white;color:var(--text);width:100%}
@@ -118,6 +119,9 @@ tbody tr:hover{background:#f8fbfd}
 <input id="search" class="search" placeholder="Tìm theo tên, mã, SĐT, MST..." oninput="render()">
 <select id="filterEmployee" class="filter-select" aria-label="Lọc nhân viên" onchange="render()"><option value="">Tất cả nhân viên</option></select>
 <select id="filterRoute" class="filter-select" aria-label="Lọc tuyến khách hàng" onchange="render()"><option value="">Tất cả tuyến khách hàng</option></select>
+<button id="exportExcelBtn" class="secondary excel-action" onclick="exportExcel()">Xuất Excel</button>
+<button id="importExcelBtn" class="secondary excel-action" onclick="document.getElementById('excelFile').click()">Nhập Excel</button>
+<input id="excelFile" type="file" accept=".xlsx,.xls,.csv" hidden onchange="importExcel(event)">
 <button class="secondary" onclick="exportJSON()">Sao lưu dữ liệu</button>
 <button class="secondary" onclick="document.getElementById('importFile').click()">Khôi phục</button>
 <input id="importFile" type="file" accept=".json,application/json" hidden onchange="importJSON(event)">
@@ -351,6 +355,65 @@ let fields=[['Mã khách hàng',x.code],['Tên',x.name],['Mã số thuế',x.tax
 document.getElementById('viewContent').innerHTML='<div class="details">'+fields.map(([k,val])=>`<div class="detail"><b>${esc(k)}</b>${esc(val||'—')}</div>`).join('')+'</div>'+
 '<div class="uploads">'+(x.front?`<div class="uploadbox"><b>CCCD mặt trước</b><img class="preview" src="${x.front.data}"></div>`:'')+(x.back?`<div class="uploadbox"><b>CCCD mặt sau</b><img class="preview" src="${x.back.data}"></div>`:'')+(x.docs||[]).map(f=>`<div class="uploadbox"><b>${esc(f.name)}</b>${f.type.startsWith('image/')?`<img class="preview" src="${f.data}">`:`<a href="${f.data}" download="${esc(f.name)}">Tải tệp</a>`}</div>`).join('')+'</div>';
 document.getElementById('viewModal').classList.add('show')}
+const EXCEL_COLUMNS=[
+ ['Mã khách hàng','code'],['Họ và tên','name'],['Tên điểm bán theo nội bộ','representative'],
+ ['Địa chỉ điểm bán theo nội bộ','address'],['Tuyến khách hàng','route'],
+ ['Nhân viên tạo mở mới','createdBy'],['Mã số thuế','tax'],['Số CCCD','cccd'],
+ ['Ngày cấp CCCD','cccdDate'],['Nơi cấp CCCD','cccdPlace'],['Thông tin khác / ghi chú','notes']
+];
+async function exportExcel(){
+ try{
+  if(!window.XLSX)throw new Error('Không tải được thư viện Excel. Vui lòng kiểm tra kết nối mạng.');
+  const records=await all();
+  const rows=records.map(x=>Object.fromEntries(EXCEL_COLUMNS.map(([label,key])=>[label,x[key]||''])));
+  const ws=XLSX.utils.json_to_sheet(rows,{header:EXCEL_COLUMNS.map(x=>x[0])});
+  ws['!cols']=[{wch:16},{wch:25},{wch:30},{wch:42},{wch:20},{wch:24},{wch:18},{wch:18},{wch:18},{wch:38},{wch:35}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Khach hang');
+  XLSX.writeFile(wb,'OANH_SON_CRM_Khach_hang_'+new Date().toISOString().slice(0,10)+'.xlsx');
+ }catch(err){alert(err.message||'Không thể xuất Excel.')}
+}
+async function importExcel(e){
+ const file=e.target.files&&e.target.files[0];if(!file)return;
+ try{
+  if(!window.XLSX)throw new Error('Không tải được thư viện Excel. Vui lòng kiểm tra kết nối mạng.');
+  const data=await file.arrayBuffer();
+  const wb=XLSX.read(data,{type:'array',cellDates:false});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false});
+  if(!rows.length)throw new Error('File Excel không có dữ liệu.');
+  const aliases={
+   code:['Mã khách hàng','Mã KH','Mã nội bộ','code'],
+   name:['Họ và tên','Tên khách hàng','Khách hàng','name'],
+   representative:['Tên điểm bán theo nội bộ','Tên điểm bán','representative'],
+   address:['Địa chỉ điểm bán theo nội bộ','Địa chỉ','address'],
+   route:['Tuyến khách hàng','Tuyến','route'],
+   createdBy:['Nhân viên tạo mở mới','Nhân viên','createdBy'],
+   tax:['Mã số thuế','MST','tax'],
+   cccd:['Số CCCD','CCCD','cccd'],
+   cccdDate:['Ngày cấp CCCD','Ngày cấp','cccdDate'],
+   cccdPlace:['Nơi cấp CCCD','Nơi cấp','cccdPlace'],
+   notes:['Thông tin khác / ghi chú','Ghi chú','notes']
+  };
+  const norm=v=>String(v??'').trim().toLocaleLowerCase('vi');
+  const get=(row,keys)=>{for(const k of keys){const found=Object.keys(row).find(h=>norm(h)===norm(k));if(found!==undefined)return String(row[found]??'').trim()}return ''};
+  const existing=await all();const byCode=new Map(existing.filter(x=>x.code).map(x=>[norm(x.code),x]));
+  let added=0,updated=0,skipped=0;
+  if(!confirm('Nhập '+rows.length+' dòng từ Excel? Hồ sơ trùng mã khách hàng sẽ được cập nhật; ảnh CCCD và tài liệu đã lưu sẽ được giữ nguyên.'))return;
+  for(const row of rows){
+   const obj={};for(const [key,keys] of Object.entries(aliases))obj[key]=get(row,keys);
+   if(!obj.name){skipped++;continue}
+   const old=obj.code?byCode.get(norm(obj.code)):null;
+   if(old){await put({...old,...obj,id:old.id,code:obj.code||old.code});updated++}
+   else{
+    const id=(obj.code||('KH'+Date.now().toString(36)+Math.random().toString(36).slice(2,6))).replace(/\s/g,'');
+    await put({id, ...obj, code:obj.code||id, createdAt:new Date().toISOString()});
+    added++;
+   }
+  }
+  await render();alert('Nhập Excel hoàn tất.\\nThêm mới: '+added+'\\nCập nhật: '+updated+'\\nBỏ qua (thiếu họ tên): '+skipped);
+ }catch(err){alert(err.message||'Không đọc được file Excel.')}
+ finally{e.target.value=''}
+}
 async function exportJSON(){let data=await all();let blob=new Blob([JSON.stringify({app:'CustomerRecords',version:1,records:data},null,2)],{type:'application/json'});download(blob,'backup-ho-so-khach-hang-'+new Date().toISOString().slice(0,10)+'.json')}
 function download(blob,name){let a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();URL.revokeObjectURL(a.href)}
 async function importJSON(e){let file=e.target.files[0];if(!file)return;try{let parsed=JSON.parse(await file.text()),records=parsed.records;if(!Array.isArray(records))throw Error();if(!confirm('Khôi phục '+records.length+' hồ sơ? Hồ sơ trùng mã nội bộ sẽ được ghi đè.'))return;for(let x of records)await put(x);await render();alert('Đã khôi phục dữ liệu.')}catch(err){alert('Tệp sao lưu không hợp lệ.')}e.target.value=''}
